@@ -1,0 +1,7 @@
+planning
+node_modules
+.env
+.backup.env
+public
+pg.js
+index.html
