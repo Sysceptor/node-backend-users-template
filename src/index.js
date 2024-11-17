@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 //need to uninstall the user-agent;
-// import userAgent from "./middleware/userAgent.js"
 import useragent from "express-useragent";
 
 //kickstarter
@@ -41,8 +40,15 @@ app.use('/auth', authRoutes);
 app.use('/admin', userRoutes);
 
 app.get('/',(req, res) => {
-    console.log(req.ip);
-    res.send(req.useragent);
+   const uAgent = req.useragent;
+   let result = {};
+   for(let [key,value] of Object.entries(uAgent)){
+    if(value===true || ["os", "browser", "version", "platform", "source"].includes(key)){
+        result[key] = value;
+    }
+
+   }
+    res.send(result);
 });
 
 const staticFile = folderPath => express.static(path.join(__dirname, folderPath));
