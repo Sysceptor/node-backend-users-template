@@ -2,18 +2,30 @@ import mongoose from "mongoose";
 import { genHashedPassword, compareHasedPassword } from "../config/authentication.js";
 import DB from "../config/db.js";
 
-// User Schema
+const deviceData = new mongoose.Schema({
+    refreshToken: { type: String, required: true },
+    deviceos: { type: String, required: true },
+    userAgent: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+    /**
+     * "isMobile": false,
+     * "isAndroid": false,
+     */
+}, {
+    timestamps: true
+}, { _id: false })
+
 const userSchema = new mongoose.Schema(
     {
         email: {
             type: String,
             required: [true, 'Email is required'],
             unique: true,
-            trim: true, // Trims whitespace
-            lowercase: true, // Normalizes email to lowercase
+            trim: true,
+            lowercase: true,
             validate: {
                 validator: function (v) {
-                    return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(v); // Simple email regex validation
+                    return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(v);
                 },
                 message: props => `${props.value} is not a valid email address!`
             }
@@ -23,6 +35,7 @@ const userSchema = new mongoose.Schema(
             required: [true, 'Username is required'],
             unique: true,
             trim: true,
+            lowercase: true,
             minlength: [3, 'Username must be at least 3 characters long'],
             maxlength: [30, 'Username cannot exceed 30 characters']
         },
@@ -30,23 +43,23 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, 'firstname is required'],
             trim: true,
+            lowercase: true,
             minlength: [3, 'firstname must be at least 3 characters long'],
             maxlength: [30, 'firstname cannot exceed 30 characters']
         },
         lastname: {
             type: String,
             trim: true,
+            lowercase: true,
             minlength: [3, 'lastname must be at least 3 characters long'],
             maxlength: [30, 'lastname cannot exceed 30 characters']
         },
         password: {
             type: String,
-            required: [true, 'Password is required'],
-            minlength: [6, 'Password must be at least 6 characters long']
         },
         phone: {
             type: String,
-            required: [true, 'Phone number is required'],
+            // required: [true, 'Phone number is required'],
             trim: true
         },
         deleted: { type: Boolean, default: false },
@@ -56,23 +69,11 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, 'Role is required'],
             default: "user",
-            enum: ["user", "admin"]
+            enum: ["user", "admin", "superadmin"]
         },
-
-        devices: [
-            {
-                refreshToken: { type: String },
-                deviceId: { type: String, required: true },
-                userAgent: { type: String },
-                createdAt: { type: Date, default: Date.now }
-            }
-        ],
-
-        refreshToken: { type: String },
+        devices: [deviceData],
         verificationToken: { type: String },
         verificationTokenExpiry: { type: Date },
-        resetToken: { type: String },
-        resetTokenExpiry: { type: Date },
     },
     {
         timestamps: true

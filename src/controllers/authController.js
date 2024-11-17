@@ -39,20 +39,16 @@ export const signup = async (req, res) => {
 // Email Verification
 export const verifyEmail = async (req, res) => {
     const { token } = req.params;
-
     try {
         const decoded = jwtVerifier(token);
         const user = await UserModel.findById(decoded.id);
-
         if (!user || !user.verificationToken || user.verificationToken !== token || Date.now() > user.verificationTokenExpiry) {
             return res.status(400).json({ status: "failed", message: 'Invalid or expired token' });
         }
-
         user.isVerified = true;
         user.verificationToken = undefined; // Clear the verification token
         user.verificationTokenExpiry = undefined; // Clear the expiry
         await user.save();
-
         res.status(200).json({ status: "success", message: 'Email verified successfully' });
     } catch (error) {
         res.status(500).json({ status: "failed", message: 'Server error' });
@@ -67,7 +63,6 @@ export const login = async (req, res) => {
         if (!user) {
             return res.status(400).json({ message: 'User not found' });
         }
-
         if (!user.isVerified) {
             if (!user.verificationToken || Date.now() > user.verificationTokenExpiry) {
                 const newVerificationToken = genJwtToken({ id: user._id });
@@ -93,7 +88,7 @@ export const login = async (req, res) => {
         if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
         //<RFT> = ReFresh Token
-        const isRFTExpired = isJWTExpired(user.refreshToken,process.env.REFRESH_TOKEN_SECRET_KEY)
+        const isRFTExpired = isJWTExpired(user.refreshToken, process.env.REFRESH_TOKEN_SECRET_KEY)
         const accessToken = genJwtToken({ id: user._id });
         if (isRFTExpired["status"]) {
             const accessToken = genJwtToken({ id: user._id });
@@ -111,17 +106,17 @@ export const login = async (req, res) => {
                 sameSite: 'None',  // Required for cross-origin requests
                 maxAge: 7 * 24 * 60 * 60 * 1000,  // 1 week
             });
-            return  res.status(200).json({ status: "success", accessToken });
+            return res.status(200).json({ status: "success", accessToken });
         }
 
         res.cookie('refreshToken', user.refreshToken, {
             httpOnly: true,
-            secure: true,  
-            sameSite: 'None', 
+            secure: true,
+            sameSite: 'None',
             maxAge: 7 * 24 * 60 * 60 * 1000,  // 1 week
         });
 
-        return  res.status(200).json({ status: "success", accessToken });
+        return res.status(200).json({ status: "success", accessToken });
     } catch (error) {
         res.status(500).json({ status: "failed", message: 'Server error' });
     }
@@ -158,7 +153,8 @@ export const requestPasswordReset = async (req, res) => {
 
 // Reset Password
 export const resetPassword = async (req, res) => {
-    const { token, newPassword } = req.body;
+    //refresh-Token
+    const { token, currentPassword,newPassword } = req.body;
 
     try {
         const decoded = jwtVerifier(token);
@@ -169,8 +165,8 @@ export const resetPassword = async (req, res) => {
         }
 
         user.password = newPassword;
-        user.resetToken = undefined; // Clear the reset token
-        user.resetTokenExpiry = undefined; // Clear the expiry
+        user.resetToken = undefined; 
+        user.resetTokenExpiry = undefined; 
         await user.save();
 
         res.status(200).json({ status: "success", message: 'Password reset successfully' });
@@ -178,7 +174,6 @@ export const resetPassword = async (req, res) => {
         res.status(500).json({ status: "failed", message: 'Server error' });
     }
 };
-
 export const refreshToken = async (req, res) => {
     const { token } = req.cookies;  // Get refresh token from cookies
     if (!token) return res.status(401).json({ message: 'Refresh token required' });
@@ -191,8 +186,6 @@ export const refreshToken = async (req, res) => {
         if (user.refreshToken !== token) {
             return res.status(403).json({ message: 'Invalid refresh token' });
         }
-
-
 
         const accessToken = genJwtToken({ id: user._id });
         // Optionally: Generate a new refresh token (token rotation)
@@ -235,3 +228,5 @@ export const logoutAll = async (req, res) => {
         res.status(500).json({ status: "failed", message: 'Server error' });
     }
 };
+
+

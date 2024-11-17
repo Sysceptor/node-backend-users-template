@@ -4,8 +4,9 @@ import bodyParser from "body-parser";
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
-
-import userAgent from "./middleware/userAgent.js";
+//need to uninstall the user-agent;
+// import userAgent from "./middleware/userAgent.js"
+import useragent from "express-useragent";
 
 //kickstarter
 import startServer from "./config/startServer.js";
@@ -14,8 +15,6 @@ import authRoutes from "./routes/authRoutes.js";
 import userRoutes from './routes/userRoutes.js';
 
 import { logIpForUser } from "./controllers/ipController.js";
-
-
 
 const app = express();
 const PORT = 3300;
@@ -34,15 +33,16 @@ app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(useragent.express());
+app.enable('trust proxy');
 
 //Routes
 app.use('/auth', authRoutes);
 app.use('/admin', userRoutes);
 
-app.get('/', userAgent,(req, res) => {
-    console.log(req.uAgent.toAgent(),"browser");
-    console.log(req.uAgent.os.toString(),"os");
-    res.send(`Hello from a  device!`);
+app.get('/',(req, res) => {
+    console.log(req.ip);
+    res.send(req.useragent);
 });
 
 const staticFile = folderPath => express.static(path.join(__dirname, folderPath));
@@ -63,7 +63,6 @@ app.get('/:imageName', (req, res) => {
         }
     });
 });
-
 
 
 const newIpLog = {

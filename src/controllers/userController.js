@@ -1,6 +1,5 @@
 import userModel from "../models/Users.js"
 
-//listing down the all details of usernames.
 export async function usersDetails(req, res) {
   try {
     const userData = await userModel.find().select('email role username -_id');
@@ -17,7 +16,6 @@ export async function usersDetails(req, res) {
   }
 };
 
-//Details perticular user name.
 export async function userDetail(req, res) {
   const { username } = req.body;
   try {
@@ -29,8 +27,6 @@ export async function userDetail(req, res) {
   };
 };
 
-
-//should make the user as admin, after that it should work
 export async function makeAdmin(req, res) {
   const { username } = req.body;
   try {
@@ -50,7 +46,6 @@ export async function makeAdmin(req, res) {
   }
 }
 
-//Banning the users
 export async function banUser(req, res) {
   const { username } = req.params;
   try {
@@ -71,7 +66,6 @@ export async function banUser(req, res) {
   }
 }
 
-// Unbanning the users.
 export async function unbanUser(req, res) {
   const { username } = req.params;
   try {

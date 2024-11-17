@@ -4,9 +4,9 @@ import DB from "../config/db.js";
 // Define the schema for each IP entry without an _id field
 const ipEntrySchema = new mongoose.Schema({
     address: {
-        type: String, // Nested IP address
+        type: String, 
         required: true,
-        trim: true, // Removes spaces in IP addresses
+        trim: true, 
         unique: true,
     },
     region: {
