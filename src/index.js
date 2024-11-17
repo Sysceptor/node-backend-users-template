@@ -48,6 +48,7 @@ app.get('/',(req, res) => {
     }
 
    }
+   result["ip"]=req.ip
     res.send(result);
 });
 
