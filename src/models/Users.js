@@ -2,19 +2,6 @@ import mongoose from "mongoose";
 import { genHashedPassword, compareHasedPassword } from "../config/authentication.js";
 import DB from "../config/db.js";
 
-const deviceData = new mongoose.Schema({
-    refreshToken: { type: String, required: true },
-    deviceos: { type: String, required: true },
-    userAgent: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now }
-    /**
-     * "isMobile": false,
-     * "isAndroid": false,
-     */
-}, {
-    timestamps: true
-}, { _id: false })
-
 const userSchema = new mongoose.Schema(
     {
         email: {
@@ -59,7 +46,7 @@ const userSchema = new mongoose.Schema(
         },
         phone: {
             type: String,
-            // required: [true, 'Phone number is required'],
+            required: [true, 'Phone number is required'],
             trim: true
         },
         deleted: { type: Boolean, default: false },
@@ -71,9 +58,7 @@ const userSchema = new mongoose.Schema(
             default: "user",
             enum: ["user", "admin", "superadmin"]
         },
-        devices: [deviceData],
         verificationToken: { type: String },
-        verificationTokenExpiry: { type: Date },
     },
     {
         timestamps: true

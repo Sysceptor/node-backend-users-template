@@ -18,7 +18,7 @@ export async function genHashedPassword(pwd,rounds = 10) {
 export async function compareHasedPassword(pwd,storedPwd){
     try{
         const compare = await bcrypt.compare(pwd,storedPwd);
-        console.log("compared Hashed Password");
+        console.log("compared Hashed Password",compare);
         return compare;
     }catch(e){
         console.log("Error comparing hashed password",e);
@@ -45,6 +45,7 @@ export function isJWTExpired(token,SECRET_KEY){
                 exp:jwtDecoder(token).exp
             }; 
         } 
+        console.log({[e.name]:e.message });
         return {[e.name]:e.message };
     }
 }

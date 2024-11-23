@@ -4,12 +4,7 @@ import bodyParser from "body-parser";
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
-//need to uninstall the user-agent;
-import useragent from "express-useragent";
-
-//kickstarter
 import startServer from "./config/startServer.js";
-// Routes
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from './routes/userRoutes.js';
 
@@ -32,33 +27,23 @@ app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(useragent.express());
 app.enable('trust proxy');
 
 //Routes
 app.use('/auth', authRoutes);
 app.use('/admin', userRoutes);
 
-app.get('/',(req, res) => {
-   const uAgent = req.useragent;
-   let result = {};
-   for(let [key,value] of Object.entries(uAgent)){
-    if(value===true || ["os", "browser", "version", "platform", "source"].includes(key)){
-        result[key] = value;
-    }
-
-   }
-   result["ip"]=req.ip
-    res.send(result);
-});
 
 const staticFile = folderPath => express.static(path.join(__dirname, folderPath));
 app.use('/images', staticFile('src/images'));
 app.use('/uploads', staticFile('public/uploads'));
 
+app.get("/",(req,res)=>res.status(200).json({message:"on live"}))
+
 app.get('/cdn/companylogo', (req, res) => {
     res.sendFile(path.join(__dirname, 'images', 'ecom-x.svg'));
 });
+
 
 app.get('/:imageName', (req, res) => {
     const imageName = req.params.imageName; 
