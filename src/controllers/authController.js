@@ -4,7 +4,6 @@ import sendMail from "../config/email.js";
 import { genJwtToken, jwtVerifier, isJWTExpired, jwtDecoder } from "../config/authentication.js";
 import { email_verification_template } from "../helper/html_template.js";
 
-
 export const signup = async (req, res) => {
     const { email, username, password, phone, fname, lname } = req.body;
     try {
@@ -53,15 +52,15 @@ export const verifyEmail = async (req, res) => {
     }
 };
 export const login = async (req, res) => {
-    const { email, password } = req.body;
     try {
+        const { email, password } = req.body;
         const user = await UserModel.findOne({ email });
         if (!user) {
             return res.status(400).json({ message: 'User not found' });
         }
         const metaData = await AuthModel.findById(user._id);
-        if(metaData.forgotPassword){
-            metaData.forgotPassword = undefined; 
+        if (metaData.forgotPassword) {
+            metaData.forgotPassword = undefined;
             await metaData.save();
         }
         if (!user.isVerified) {
@@ -108,7 +107,7 @@ export const login = async (req, res) => {
         }
         const isRefreshToken = req.cookies.refreshToken;
         const extractRFT = jwtDecoder(req.cookies.refreshToken);
-        async function isUserAuthPresent() {
+        async function isUserAuthToken() {
             try {
                 if (isRefreshToken) {
                     const authFind = await AuthModel.findOne(
@@ -122,7 +121,7 @@ export const login = async (req, res) => {
                 return false;
             }
         }
-        if (await isUserAuthPresent()) {
+        if (await isUserAuthToken()) {
             const authFind = await AuthModel.findOne(
                 { _id: extractRFT.id, "loggedin._id": extractRFT.id2 },
                 { loggedin: { $elemMatch: { _id: extractRFT.id2 } } }
@@ -185,7 +184,7 @@ export const login = async (req, res) => {
 };
 export const forgotPassword = async (req, res) => {
     try {
-        const { email } = req.body 
+        const { email } = req.body
         const existingUser = await UserModel.findOne({ email, deleted: false, isVerified: true });
         const metaData = await AuthModel.findById(existingUser._id);
         if (existingUser && metaData) {
@@ -198,9 +197,9 @@ export const forgotPassword = async (req, res) => {
                 subject: 'Reset your password',
                 text: `Please reset your password by clicking this link: ${resetUrl}`,
             })
-           return res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
+            return res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
         };
-       return res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
+        return res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
 
     } catch (e) {
         console.log({ [e.name]: e.message });
@@ -208,45 +207,40 @@ export const forgotPassword = async (req, res) => {
 
     }
 };
-
-export const forgotPasswordVerification=async(req,res)=>{
-    try{
-        const {token} = req.params;
+export const forgotPasswordVerification = async (req, res) => {
+    try {
+        const { token } = req.params;
         const { password } = req.body;
         const decoded = jwtVerifier(token);
         const existingUser = await UserModel.findById(decoded.id);
-        const authMetaData = await AuthModel.findOne({_id:decoded.id,forgotPassword:token});
-        if(existingUser && authMetaData){
-           existingUser.password = password;
-           authMetaData.loggedin = new Array();
-           authMetaData.forgotPassword = undefined;
+        const authMetaData = await AuthModel.findOne({ _id: decoded.id, forgotPassword: token });
+        if (existingUser && authMetaData) {
+            existingUser.password = password;
+            authMetaData.loggedin = new Array();
+            authMetaData.forgotPassword = undefined;
             await existingUser.save();
             await authMetaData.save();
             return res.status(200).json({ status: "success", message: 'password reseted' });
         }
         return res.status(400).json({ status: "success", message: 'password reseted expired' });
-    }catch(e){
-        console.log({ [e.name]:e.message});
+    } catch (e) {
+        console.log({ [e.name]: e.message });
         return res.status(400).json({ status: "failed", message: 'server error' });
     }
-}
-
-//Generator Rcefresh Tokeni
+};
 export const refreshToken = async (req, res) => {
-    const { token } = req.cookies;  // Get refresh token from cookies
-    if (!token) return res.status(401).json({ message: 'Refresh token required' });
     try {
+        const { refreshToken } = req.cookies;
+        if (!refreshToken) return res.status(401).json({ status: "failed", message: 'Refresh token required' });
         const decoded = jwtVerifier(token, process.env.REFRESH_TOKEN_SECRET_KEY);
         const user = await UserModel.findById(decoded.id);
         if (!user) return res.status(403).json({ message: 'User not found' });
 
-        // Check if the provided refresh token matches the one stored in the database
         if (user.refreshToken !== token) {
             return res.status(403).json({ message: 'Invalid refresh token' });
         }
 
         const accessToken = genJwtToken({ id: user._id });
-        // Optionally: Generate a new refresh token (token rotation)
         const newRefreshToken = genJwtToken(
             { id: user._id },
             process.env.REFRESH_TOKEN_SECRET_KEY,
@@ -254,32 +248,24 @@ export const refreshToken = async (req, res) => {
         );
         user.refreshToken = newRefreshToken;
         await user.save();
-
-        // Set new refresh token in HttpOnly cookie
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'None',
-            maxAge: 7 * 24 * 60 * 60 * 1000,  // 1 week
+            maxAge: 7 * 24 * 60 * 60 * 1000,
         });
-
-        // Send new access token in response body
         res.status(200).json({ status: "success", accessToken });
     } catch (error) {
         res.status(403).json({ status: "failed", message: 'Invalid or expired refresh token' });
     }
-}
-
-// Logout Endpoint
+};
 export const logoutAll = async (req, res) => {
-    const { token } = req.body;
     try {
-        const user = await UserModel.findOneAndUpdate({ refreshToken: token }, { refreshToken: '' });
-        // const decoded = jwtVerifier(token, process.env.REFRESH_TOKEN_SECRET_KEY);
-        // const user = await UserModel.findById(decoded.id);
-        if (!user) return res.status(404).json({ message: 'User not found' });
-        // user.refreshToken = undefined;
-        // await user.save();
+        const refreshToken = req.cookies.refreshToken;
+        const extractTokenRT = jwtDecoder(refreshToken)
+        const metaData = await AuthModel.findById(extractTokenRT.id);
+        metaData.loggedin = new Array();
+        await metaData.save();
         res.status(200).json({ status: "success", message: 'Logged out successfully' });
     } catch (error) {
         res.status(500).json({ status: "failed", message: 'Server error' });

@@ -12,7 +12,6 @@ export const generateMongooseId = (req, res, next) => {
         next(error);
     }
 };
-
 export function userAgentMiddleware(req,res, next) {
     try {
         const uAgent = useragent.parse(req.headers['user-agent']);
@@ -28,4 +27,4 @@ export function userAgentMiddleware(req,res, next) {
     } catch (error) {
         console.log(error);
     };
-}
+};
