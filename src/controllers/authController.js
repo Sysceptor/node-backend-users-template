@@ -4,11 +4,11 @@ import sendMail from "../config/email.js";
 import { genJwtToken, jwtVerifier, isJWTExpired, jwtDecoder } from "../config/authentication.js";
 import { email_verification_template } from "../helper/html_template.js";
 
+
 export const signup = async (req, res) => {
     const { email, username, password, phone, fname, lname } = req.body;
     try {
         const existingUser = await UserModel.findOne({ email }, "_id");
-        console.log(existingUser);
         const existingUserName = await UserModel.findOne({ username });
         if (existingUser) return res.status(400).json({ message: 'User already exists', isUser: true });
         if (existingUserName) return res.status(400).json({ message: 'Username already exists', isusername: true });
@@ -33,8 +33,6 @@ export const signup = async (req, res) => {
         res.status(500).json({ status: "failed", message: `Server ${error}` });
     }
 };
-
-// Email Verification
 export const verifyEmail = async (req, res) => {
     const { token } = req.params;
     try {
@@ -54,7 +52,6 @@ export const verifyEmail = async (req, res) => {
         res.status(500).json({ status: "failed", message: 'Server error' });
     }
 };
-
 export const login = async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -63,6 +60,10 @@ export const login = async (req, res) => {
             return res.status(400).json({ message: 'User not found' });
         }
         const metaData = await AuthModel.findById(user._id);
+        if(metaData.forgotPassword){
+            metaData.forgotPassword = undefined; 
+            await metaData.save();
+        }
         if (!user.isVerified) {
             if (!metaData.verificationToken || isJWTExpired(metaData.verificationToken).status) {
                 const newVerificationToken = genJwtToken({ id: user._id });
@@ -81,69 +82,70 @@ export const login = async (req, res) => {
 
             return res.status(400).json({ status: "failed", message: 'User not verified. Please check your email for verification.' });
         }
-
         const isMatch = await user.comparePassword(password);
         if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
-
-
         const mongoId = req.genMongooseid
+        const newAccessToken = genJwtToken({ id: user._id, id2: mongoId })
+        const newRefreshToken = genJwtToken({ id: user._id, id2: mongoId },
+            process.env.REFRESH_TOKEN_SECRET_KEY,
+            process.env.JWT_REFRESH_TOKEN_LIFE
+        );
         if (metaData.loggedin.length === 0) {
-            console.log(mongoId,"checkng");
             metaData.loggedin.push({
                 _id: mongoId,
                 metadata: { ...req.useragent },
+                accessToken: newAccessToken,
+                refreshToken: newRefreshToken,
             });
-            const mAccessToken = genJwtToken({ id: user._id, id2: mongoId })
-            const mRefreshToken = genJwtToken({ id: user._id, id2: mongoId },
-                process.env.REFRESH_TOKEN_SECRET_KEY,
-                process.env.JWT_REFRESH_TOKEN_LIFE
-            );
-            metaData.loggedin[0].accessToken = mAccessToken;
-            metaData.loggedin[0].refreshToken = mRefreshToken;
             await metaData.save();
-            res.cookie('refreshToken', mRefreshToken, {
+            res.cookie('refreshToken', newRefreshToken, {
                 httpOnly: true,
                 secure: true,
                 sameSite: 'None',
                 maxAge: 7 * 24 * 60 * 60 * 1000,
             });
-            return res.status(200).json({ status: "success", mAccessToken });
+            return res.status(200).json({ status: "success", accessToken: newAccessToken });
         }
-
         const isRefreshToken = req.cookies.refreshToken;
-        if (isRefreshToken) {
-            console.log(isRefreshToken, "cookies from browser"); //undefined
-            console.log(jwtDecoder(isRefreshToken), "cookies "); //null
-            console.log("testing"); //testing
-            //you can't JSON.parse null so it will spit error
-            const result = JSON.parse(JSON.stringify(metaData.loggedin)).find(item => item._id === jwtDecoder(isRefreshToken).id2)
-
-            console.log("result");
-            console.log(JSON.parse(JSON.stringify(metaData))); //working
-
-            console.log(result);
-            console.log(isJWTExpired(result.accessToken), "Access Token");
-            console.log(isJWTExpired(isRefreshToken, process.env.REFRESH_TOKEN_SECRET_KEY), "Refresh Token")
+        const extractRFT = jwtDecoder(req.cookies.refreshToken);
+        async function isUserAuthPresent() {
+            try {
+                if (isRefreshToken) {
+                    const authFind = await AuthModel.findOne(
+                        { _id: extractRFT.id, "loggedin._id": extractRFT.id2 },
+                        { loggedin: { $elemMatch: { _id: extractRFT.id2 } } }
+                    );
+                    return authFind ? true : false;
+                }
+                return false;
+            } catch (e) {
+                return false;
+            }
+        }
+        if (await isUserAuthPresent()) {
+            const authFind = await AuthModel.findOne(
+                { _id: extractRFT.id, "loggedin._id": extractRFT.id2 },
+                { loggedin: { $elemMatch: { _id: extractRFT.id2 } } }
+            );
+            const result = authFind?.loggedin[0]
             const mAccessToken = genJwtToken({ id: user._id, id2: result._id })
             if (result.refreshToken === isRefreshToken) {
                 if (!isJWTExpired(isRefreshToken, process.env.REFRESH_TOKEN_SECRET_KEY).status) {
                     if (isJWTExpired(result.accessToken).status) {
-                        const mottt = await AuthModel.updateOne(
+                        await AuthModel.updateOne(
                             { _id: user._id, 'loggedin._id': result._id },
                             { $set: { 'loggedin.$.accessToken': mAccessToken } }
                         );
-                        console.log(mottt, "mottt");
                         return res.status(200).json({ status: "success", AccessToken: mAccessToken });
                     }
-                    return res.status(200).json({ status: true, mAccessToken:result.accessToken });
+                    return res.status(200).json({ status: true, accesstoken: result.accessToken }); //it already present in cookies
 
                 } else {
                     const mRefreshToken = genJwtToken({ id: user._id, id2: result._id },
                         process.env.REFRESH_TOKEN_SECRET_KEY,
                         process.env.JWT_REFRESH_TOKEN_LIFE
                     );
-
-                    const bottt = await AuthModel.updateOne(
+                    await AuthModel.updateOne(
                         { _id: user._id, 'loggedin._id': result._id },
                         {
                             $set: {
@@ -152,7 +154,6 @@ export const login = async (req, res) => {
                             }
                         }
                     );
-                    console.log(bottt, "bottt");
                     res.cookie('refreshToken', mRefreshToken, {
                         httpOnly: true,
                         secure: true,
@@ -163,86 +164,74 @@ export const login = async (req, res) => {
                 }
             }
         }
-        console.log("mongoId");
-        console.log(mongoId);
-        console.log(user._id,"userId");
-        // const mAccessToken = genJwtToken({ id: user._id, id2: mongoId })
-        // const mRefreshToken = genJwtToken({ id: user._id, id2: mongoId },
-        //     process.env.REFRESH_TOKEN_SECRET_KEY,
-        //     process.env.JWT_REFRESH_TOKEN_LIFE
-        // );
-
-        // metaData.loggedin.push({
-        //     _id: mongoId,
-        //     metadata: { ...req.useragent },
-        //     accessToken: mAccessToken,
-        //     refreshToken: mRefreshToken,
-        // });
-
-        // await metaData.save();
-        // res.cookie('refreshToken', mRefreshToken, {
-        //     httpOnly: true,
-        //     secure: true,
-        //     sameSite: 'None',
-        //     maxAge: 7 * 24 * 60 * 60 * 1000,
-        // });
-        return res.status(200).json({ status: "success", mAccessToken:"end" });
+        metaData.loggedin.push({
+            _id: mongoId,
+            metadata: { ...req.useragent },
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+        });
+        await metaData.save();
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'None',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+        return res.status(200).json({ status: "success", newAccessToken });
     } catch (error) {
+        console.log({ [error.name]: error.message });
         res.status(500).json({ status: "failed", message: `Server ${error}` });
     }
 };
-
 export const forgotPassword = async (req, res) => {
-    //resetPassword need mail mail verification
     try {
-        const { email } = req.body // email or username;
-        console.log(email);
-        const existingUser = await UserModel.findOne({ email, isVerified: true, delete: false });
-        console.log(existingUser);
-        const metaData = await AuthModel.findOne();
-        console.log(metaData);
-
-        // if (metaData) {
-        //     const VerifyToken = genJwtToken({ id: existingUser.id });
-        //     metaData.forgotPassword = VerifyToken;
-        //     await existingUser.save();
-
-        //     const resetUrl = `https://${req.hostname}/auth/reset-password/${VerifyToken}`;
-        //     await sendMail({
-        //         to: email,
-        //         subject: 'Reset your password',
-        //         text: `Please reset your password by clicking this link: ${resetUrl}`,
-        //     })
-        //     res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
-        // };
-        res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
+        const { email } = req.body 
+        const existingUser = await UserModel.findOne({ email, deleted: false, isVerified: true });
+        const metaData = await AuthModel.findById(existingUser._id);
+        if (existingUser && metaData) {
+            const VerifyToken = genJwtToken({ id: existingUser.id });
+            metaData.forgotPassword = VerifyToken;
+            await metaData.save();
+            const resetUrl = `https://${req.hostname}/auth/forgotpassword/${VerifyToken}`;
+            await sendMail({
+                to: email,
+                subject: 'Reset your password',
+                text: `Please reset your password by clicking this link: ${resetUrl}`,
+            })
+           return res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
+        };
+       return res.status(200).json({ status: "success", message: 'Password reset link sent to your email' });
 
     } catch (e) {
         console.log({ [e.name]: e.message });
-        res.status(400).json({ status: "failed", message: 'server error' });
+        return res.status(400).json({ status: "failed", message: 'server error' });
 
     }
 };
 
-
-export const resetPassword = async (req, res) => {
-    try {
-        const { currentPassword, newPassword } = req.body;
+export const forgotPasswordVerification=async(req,res)=>{
+    try{
+        const {token} = req.params;
+        const { password } = req.body;
         const decoded = jwtVerifier(token);
-        const user = await UserModel.findById(decoded.id);
-        const isMatch = await user.comparePassword(currentPassword);
-        if (!isMatch) {
-            return res.status(400).json({ status: "failed", message: 'Invalid' });
+        const existingUser = await UserModel.findById(decoded.id);
+        const authMetaData = await AuthModel.findOne({_id:decoded.id,forgotPassword:token});
+        if(existingUser && authMetaData){
+           existingUser.password = password;
+           authMetaData.loggedin = new Array();
+           authMetaData.forgotPassword = undefined;
+            await existingUser.save();
+            await authMetaData.save();
+            return res.status(200).json({ status: "success", message: 'password reseted' });
         }
-        user.password = newPassword;
-        await user.save();
-        res.status(200).json({ status: "success", message: 'Password reset successfully' });
-    } catch (error) {
-        res.status(500).json({ status: "failed", message: 'Server error' });
+        return res.status(400).json({ status: "success", message: 'password reseted expired' });
+    }catch(e){
+        console.log({ [e.name]:e.message});
+        return res.status(400).json({ status: "failed", message: 'server error' });
     }
-};
+}
 
-//Generator Rcefresh Token
+//Generator Rcefresh Tokeni
 export const refreshToken = async (req, res) => {
     const { token } = req.cookies;  // Get refresh token from cookies
     if (!token) return res.status(401).json({ message: 'Refresh token required' });
@@ -279,7 +268,7 @@ export const refreshToken = async (req, res) => {
     } catch (error) {
         res.status(403).json({ status: "failed", message: 'Invalid or expired refresh token' });
     }
-};
+}
 
 // Logout Endpoint
 export const logoutAll = async (req, res) => {

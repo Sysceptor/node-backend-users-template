@@ -8,7 +8,8 @@ import {
     verifyEmail,
     login,
     forgotPassword,
-    resetPassword,
+    // resetPassword,
+    forgotPasswordVerification,
     refreshToken
 } from '../controllers/authController.js';
 
@@ -21,8 +22,8 @@ router.post('/signup',signup);
 router.get('/verify/:token', verifyEmail);
 router.post('/login',generateMongooseId, login);
 router.post('/forgotpassword', forgotPassword);
-// router.post('/request-password-reset/:token', forgotPasswordVerify);
-router.post('/reset-password',/*auth,*/ resetPassword);
+router.post('/forgotpassword/:token', forgotPasswordVerification);
+// router.post('/reset-password',/*auth,*/ resetPassword);
 router.post('/refresh-token',auth, refreshToken);
 
 export default router;
