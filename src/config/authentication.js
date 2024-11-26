@@ -14,7 +14,6 @@ export async function genHashedPassword(pwd,rounds = 10) {
         throw e;
     }
 }
-
 export async function compareHasedPassword(pwd,storedPwd){
     try{
         const compare = await bcrypt.compare(pwd,storedPwd);
@@ -25,11 +24,9 @@ export async function compareHasedPassword(pwd,storedPwd){
         throw e;
     }
 }
-
 export const genJwtToken = (payload,SECRET_KEY=ACCESS_TOKEN_SECRET_KEY,expiresIn=JWT_TOKEN_LIFE) => jwt.sign(payload,SECRET_KEY,{ expiresIn });
 export const jwtVerifier = (token,SECRET_KEY=ACCESS_TOKEN_SECRET_KEY) => jwt.verify(token,SECRET_KEY);
 export const jwtDecoder = (token) => jwt.decode(token);
-
 export function isJWTExpired(token,SECRET_KEY){
     try{
         const jwtv = jwtVerifier(token,SECRET_KEY);
@@ -38,7 +35,6 @@ export function isJWTExpired(token,SECRET_KEY){
             exp: jwtv.exp
         }; 
     }catch(e){
-        
         if(e.name === "TokenExpiredError"){ 
             return {
                 status:true,

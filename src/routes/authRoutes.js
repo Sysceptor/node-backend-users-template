@@ -11,7 +11,8 @@ import {
     // resetPassword,
     forgotPasswordVerification,
     refreshToken,
-    logoutAll
+    logoutAll,
+    logout
 } from '../controllers/authController.js';
 
 const router = express.Router();
@@ -25,7 +26,8 @@ router.post('/login',generateMongooseId, login);
 router.post('/forgotpassword', forgotPassword);
 router.post('/forgotpassword/:token', forgotPasswordVerification);
 // router.post('/reset-password',/*auth,*/ resetPassword);
-router.post('/refresh-token',auth, refreshToken);
+router.post('/refreshtoken',/*auth,*/ refreshToken);
 router.get('/logoutall',/*auth,*/logoutAll);
+router.get('/logout',/*auth,*/logout);
 
 export default router;

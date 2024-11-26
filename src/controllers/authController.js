@@ -5,8 +5,8 @@ import { genJwtToken, jwtVerifier, isJWTExpired, jwtDecoder } from "../config/au
 import { email_verification_template } from "../helper/html_template.js";
 
 export const signup = async (req, res) => {
-    const { email, username, password, phone, fname, lname } = req.body;
     try {
+        const { email, username, password, phone, fname, lname } = req.body;
         const existingUser = await UserModel.findOne({ email }, "_id");
         const existingUserName = await UserModel.findOne({ username });
         if (existingUser) return res.status(400).json({ message: 'User already exists', isUser: true });
@@ -137,7 +137,7 @@ export const login = async (req, res) => {
                         );
                         return res.status(200).json({ status: "success", AccessToken: mAccessToken });
                     }
-                    return res.status(200).json({ status: true, accesstoken: result.accessToken }); //it already present in cookies
+                    return res.status(200).json({ status: true, accesstoken: result.accessToken }); 
 
                 } else {
                     const mRefreshToken = genJwtToken({ id: user._id, id2: result._id },
@@ -230,33 +230,117 @@ export const forgotPasswordVerification = async (req, res) => {
 };
 export const refreshToken = async (req, res) => {
     try {
-        const { refreshToken } = req.cookies;
-        if (!refreshToken) return res.status(401).json({ status: "failed", message: 'Refresh token required' });
-        const decoded = jwtVerifier(token, process.env.REFRESH_TOKEN_SECRET_KEY);
-        const user = await UserModel.findById(decoded.id);
-        if (!user) return res.status(403).json({ message: 'User not found' });
-
-        if (user.refreshToken !== token) {
-            return res.status(403).json({ message: 'Invalid refresh token' });
+        const isRefreshToken = req.cookies.refreshToken;
+        const extractRFT = jwtDecoder(req.cookies.refreshToken);
+        const existingUser = await UserModel.findOne({ _id:extractRFT.id,isVerified:true,deleted:false });
+        if (!existingUser) {
+            return res.status(400).json({ status:"failed",message: 'broken' }); //if existingUser inValid do auto logout;
         }
+        const metaData = await AuthModel.findById(existingUser._id);
+        if (metaData && metaData.forgotPassword) {
+            metaData.forgotPassword = undefined;
+            await metaData.save();
+        }
+        async function isUserAuthRT() {
+            try {
+                if (isRefreshToken) {
+                    const authFind = await AuthModel.findOne(
+                        { _id: extractRFT.id, "loggedin._id": extractRFT.id2 },
+                        { loggedin: { $elemMatch: { _id: extractRFT.id2 } } }
+                    );
+                    return authFind ? true : false;
+                }
+                return false;
+            } catch (e) {
+                return false;
+            }
+        }
+        const isUserAuthRTMatch = await isUserAuthRT()
+        console.log(isUserAuthRTMatch);
+        if (isUserAuthRTMatch) {
+            const authFind = await AuthModel.findOne(
+                { _id: extractRFT.id, "loggedin._id": extractRFT.id2 },
+                { loggedin: { $elemMatch: { _id: extractRFT.id2 } } }
+            );
+            const result = authFind?.loggedin[0]
+            const mAccessToken = genJwtToken({ id: existingUser._id, id2: result._id })
+            if (result.refreshToken === isRefreshToken) {
+                if (!isJWTExpired(isRefreshToken, process.env.REFRESH_TOKEN_SECRET_KEY).status) {
+                    if (isJWTExpired(result.accessToken).status) {
+                        await AuthModel.updateOne(
+                            { _id: existingUser._id, 'loggedin._id': result._id },
+                            { $set: { 'loggedin.$.accessToken': mAccessToken } }
+                        );
+                        return res.status(200).json({ status: "success", AccessToken: mAccessToken });
+                    }
+                    return res.status(200).json({ status: true, accesstoken: result.accessToken }); 
 
-        const accessToken = genJwtToken({ id: user._id });
-        const newRefreshToken = genJwtToken(
-            { id: user._id },
+                } else {
+                    const mRefreshToken = genJwtToken({ id: existingUser._id, id2: result._id },
+                        process.env.REFRESH_TOKEN_SECRET_KEY,
+                        process.env.JWT_REFRESH_TOKEN_LIFE
+                    );
+                    await AuthModel.updateOne(
+                        { _id: existingUser._id, 'loggedin._id': result._id },
+                        {
+                            $set: {
+                                'loggedin.$.accessToken': mAccessToken,
+                                'loggedin.$.refreshToken': mRefreshToken
+                            }
+                        }
+                    );
+                    res.cookie('refreshToken', mRefreshToken, {
+                        httpOnly: true,
+                        secure: true,
+                        sameSite: 'None',
+                        maxAge: 7 * 24 * 60 * 60 * 1000,
+                    });
+                    return res.status(200).json({ status: true,accesstoken: mAccessToken });
+                }
+            }
+        }
+        const mongoId = req.genMongooseid
+        const newAccessToken = genJwtToken({ id: existingUser._id, id2: mongoId })
+        const newRefreshToken = genJwtToken({ id: existingUser._id, id2: mongoId },
             process.env.REFRESH_TOKEN_SECRET_KEY,
             process.env.JWT_REFRESH_TOKEN_LIFE
         );
-        user.refreshToken = newRefreshToken;
-        await user.save();
+        metaData.loggedin.push({
+            _id: mongoId,
+            metadata: { ...req.useragent },
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+        });
+        await metaData.save();
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: true,
             sameSite: 'None',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
-        res.status(200).json({ status: "success", accessToken });
+        return res.status(200).json({ status: "success", accesstoken : newAccessToken });
     } catch (error) {
-        res.status(403).json({ status: "failed", message: 'Invalid or expired refresh token' });
+        console.log({ [error.name]: error.message });
+        res.status(500).json({ status: "failed", message: `Server ${error}` }); //if existingUser inValid do auto logout;
+    }
+};
+export const logout = async (req, res) => {
+    try {
+        const refreshToken = req.cookies.refreshToken;
+        const extractTokenRT = jwtDecoder(refreshToken)
+        const metaData = await AuthModel.findById(extractTokenRT.id);
+        if (metaData && metaData.forgotPassword) {
+            metaData.forgotPassword = undefined;
+            await metaData.save();
+        }
+       await AuthModel.findOneAndUpdate(
+            {_id:extractTokenRT.id},
+            {$pull:{loggedin:{_id:extractTokenRT.id2}}},
+            {new:true}
+        );
+        res.status(200).json({ status: "success", message: 'Logged out successfully' });
+    } catch (error) {
+        res.status(500).json({ status: "failed", message: 'Server error' });
     }
 };
 export const logoutAll = async (req, res) => {
@@ -264,6 +348,10 @@ export const logoutAll = async (req, res) => {
         const refreshToken = req.cookies.refreshToken;
         const extractTokenRT = jwtDecoder(refreshToken)
         const metaData = await AuthModel.findById(extractTokenRT.id);
+        if (metaData && metaData.forgotPassword) {
+            metaData.forgotPassword = undefined;
+            await metaData.save();
+        }
         metaData.loggedin = new Array();
         await metaData.save();
         res.status(200).json({ status: "success", message: 'Logged out successfully' });
