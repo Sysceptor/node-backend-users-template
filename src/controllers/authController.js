@@ -75,7 +75,6 @@ export const login = async (req, res) => {
                     text: `Please verify your email by clicking this link: ${verificationUrl}`,
                     html: email_verification_template(verificationUrl, `${user.firstname} ${user.lastname}`, req.hostname)
                 });
-
                 return res.status(400).json({ status: "success", message: 'Verification email expired. A new verification email has been sent to your inbox.' });
             }
 
@@ -106,6 +105,7 @@ export const login = async (req, res) => {
             return res.status(200).json({ status: "success", accessToken: newAccessToken });
         }
         const isRefreshToken = req.cookies.refreshToken;
+        console.log(isRefreshToken, "isRefreshToken");
         const extractRFT = jwtDecoder(req.cookies.refreshToken);
         async function isUserAuthToken() {
             try {
@@ -137,7 +137,7 @@ export const login = async (req, res) => {
                         );
                         return res.status(200).json({ status: "success", AccessToken: mAccessToken });
                     }
-                    return res.status(200).json({ status: true, accesstoken: result.accessToken }); 
+                    return res.status(200).json({ status: true, accesstoken: result.accessToken });
 
                 } else {
                     const mRefreshToken = genJwtToken({ id: user._id, id2: result._id },
@@ -207,6 +207,31 @@ export const forgotPassword = async (req, res) => {
 
     }
 };
+export const resetPassword = async (req, res) => {
+    try {
+        const clientRT = req.cookies["refreshToken"];
+        const extractRT = jwtDecoder(clientRT);
+        const existingUser = await UserModel.findById(extractRT.id);
+        const userAuthId = await AuthModel.findById(extractRT.id);
+        if (!existingUser) return res.status(400).json({ status: "failed", message: '' });
+        const { currentpassword, password } = req.body;
+        const isPasswordMatch = await existingUser.comparePassword(currentpassword);
+        if (!isPasswordMatch) return res.status().json({ status: "failed", isPasswordMatch: false });
+        existingUser.password = password;
+        await AuthModel.findOneAndUpdate(
+            { _id: extractRT.id },
+            { $pull: { loggedin: { _id: extractRT.id2 } } },
+            { new: true }
+        );
+        userAuthId.loggedin = [];
+        await existingUser.save();
+        await userAuthId.save();
+        return res.status(200).json({ status: "success", message: 'reset password successed' });
+    } catch (e) {
+        console.log({ [e.name]: e.message });
+        return res.status(400).json({ status: "failed", message: 'server error' });
+    }
+};
 export const forgotPasswordVerification = async (req, res) => {
     try {
         const { token } = req.params;
@@ -232,9 +257,9 @@ export const refreshToken = async (req, res) => {
     try {
         const isRefreshToken = req.cookies.refreshToken;
         const extractRFT = jwtDecoder(req.cookies.refreshToken);
-        const existingUser = await UserModel.findOne({ _id:extractRFT.id,isVerified:true,deleted:false });
+        const existingUser = await UserModel.findOne({ _id: extractRFT.id, isVerified: true, deleted: false });
         if (!existingUser) {
-            return res.status(400).json({ status:"failed",message: 'broken' }); //if existingUser inValid do auto logout;
+            return res.status(400).json({ status: "failed", message: 'broken' }); //if existingUser inValid do auto logout;
         }
         const metaData = await AuthModel.findById(existingUser._id);
         if (metaData && metaData.forgotPassword) {
@@ -256,7 +281,6 @@ export const refreshToken = async (req, res) => {
             }
         }
         const isUserAuthRTMatch = await isUserAuthRT()
-        console.log(isUserAuthRTMatch);
         if (isUserAuthRTMatch) {
             const authFind = await AuthModel.findOne(
                 { _id: extractRFT.id, "loggedin._id": extractRFT.id2 },
@@ -273,7 +297,7 @@ export const refreshToken = async (req, res) => {
                         );
                         return res.status(200).json({ status: "success", AccessToken: mAccessToken });
                     }
-                    return res.status(200).json({ status: true, accesstoken: result.accessToken }); 
+                    return res.status(200).json({ status: true, accesstoken: result.accessToken });
 
                 } else {
                     const mRefreshToken = genJwtToken({ id: existingUser._id, id2: result._id },
@@ -295,7 +319,7 @@ export const refreshToken = async (req, res) => {
                         sameSite: 'None',
                         maxAge: 7 * 24 * 60 * 60 * 1000,
                     });
-                    return res.status(200).json({ status: true,accesstoken: mAccessToken });
+                    return res.status(200).json({ status: true, accesstoken: mAccessToken });
                 }
             }
         }
@@ -318,7 +342,7 @@ export const refreshToken = async (req, res) => {
             sameSite: 'None',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
-        return res.status(200).json({ status: "success", accesstoken : newAccessToken });
+        return res.status(200).json({ status: "success", accesstoken: newAccessToken });
     } catch (error) {
         console.log({ [error.name]: error.message });
         res.status(500).json({ status: "failed", message: `Server ${error}` }); //if existingUser inValid do auto logout;
@@ -327,17 +351,19 @@ export const refreshToken = async (req, res) => {
 export const logout = async (req, res) => {
     try {
         const refreshToken = req.cookies.refreshToken;
+        console.log(refreshToken);
         const extractTokenRT = jwtDecoder(refreshToken)
+        console.log(extractTokenRT);
         const metaData = await AuthModel.findById(extractTokenRT.id);
         if (metaData && metaData.forgotPassword) {
             metaData.forgotPassword = undefined;
             await metaData.save();
         }
-       await AuthModel.findOneAndUpdate(
-            {_id:extractTokenRT.id},
-            {$pull:{loggedin:{_id:extractTokenRT.id2}}},
-            {new:true}
-        );
+        await AuthModel.findOneAndUpdate(
+            { _id: extractTokenRT.id },
+            { $pull: { loggedin: { _id: extractTokenRT.id2 } } },
+            { new: true }
+        )
         res.status(200).json({ status: "success", message: 'Logged out successfully' });
     } catch (error) {
         res.status(500).json({ status: "failed", message: 'Server error' });

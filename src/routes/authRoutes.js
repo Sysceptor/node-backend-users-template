@@ -8,7 +8,7 @@ import {
     verifyEmail,
     login,
     forgotPassword,
-    // resetPassword,
+    resetPassword,
     forgotPasswordVerification,
     refreshToken,
     logoutAll,
@@ -25,7 +25,7 @@ router.get('/verify/:token', verifyEmail);
 router.post('/login',generateMongooseId, login);
 router.post('/forgotpassword', forgotPassword);
 router.post('/forgotpassword/:token', forgotPasswordVerification);
-// router.post('/reset-password',/*auth,*/ resetPassword);
+router.post('/resetpassword',/*auth,*/ resetPassword);
 router.post('/refreshtoken',/*auth,*/ refreshToken);
 router.get('/logoutall',/*auth,*/logoutAll);
 router.get('/logout',/*auth,*/logout);
